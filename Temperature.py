@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy as sp
-import scipy.fftpack
 from scipy import signal
+from scipy.stats import mode
 
 
 def plot_data(df):
@@ -14,7 +14,7 @@ def plot_data(df):
     plt.show()
 
 
-def calculate_derivative(df):
+def derivative(df):
     '''
     Calculating derivative of given series of data
     '''
@@ -27,8 +27,18 @@ def filter(df):
         To properly analize data one has to get rid of those
         oscialtions  using some low pass filter.
     '''
-    # I quickly implemented moving average
-    return df.rolling(window=10).mean()
+    # I quickly implemented moving average: window paramter means how
+    # much data has to be taken under consideration
+    #
+    # 1. Mode (most repeated value)
+    # return df.rolling(window=5).apply(lambda x: mode(x)[0])]
+    #
+    # 2. Median
+    # return df.rolling(window=10, center=True).median()
+    #
+    # 3. Similar to rolling() but argument is time not number of data
+    #    points
+    return df.resample("30min").median()
 
 
 #####################################################################
@@ -55,17 +65,37 @@ data = data.groupby(data.index).mean()
 df = data.squeeze()
 
 # One can look at smaller pieces of data -- you short it as following
-df_s = df['2019-08-29 14']
+# df = df['2020-03-20':'2020-03-23']
 
 #####################################################################
 
 # Comparison of smoothed and raw data
-df.plot()
-df.rolling(window=8).mean().plot()
+#
+fig, axes = plt.subplots(2, 1, sharex=True)
+
+axes[0].set_ylabel("Temperature  [$\\degree$ C]")
+axes[1].set_ylabel("Temperature/second \
+    [${}^{\\degree}\\mathrm{C}/_\\mathrm{sec}$]")
+
+axes[0].set_title("Data")
+axes[1].set_title("Derivative")
+
+df.plot(label="Raw", legend=True, ax=axes[0])
+filter(df).plot(label="Filtered", legend=True, ax=axes[0])
+# plt.show()
+
+# Playing with derivatives
+#
+derivative(df).plot(label="Raw", legend=True, ax=axes[1])
+derivative(filter(df)).plot(label="Der. of filtered", legend=True)
+derivative(filter(df)).rolling(window=10).sum().plot(
+    label="Sum of der. of filtered", legend=True)
 plt.show()
 
-# plot_data(df)
+# Playing with autocorrelation -- corellation between data and
+# shifted data. For some data it is visible that data is correlated
+# after shifting ~24h
+#
+pd.plotting.autocorrelation_plot(df.resample("1h").median(), label="Autocorrelation")
 
-# low_filter(data)
-
-# print(data)
+plt.show()
