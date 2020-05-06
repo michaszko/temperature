@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import scipy as sp
 from scipy import signal
 from scipy.stats import mode
+from statsmodels.tsa.seasonal import seasonal_decompose
 
 
 def plot_data(df):
@@ -41,6 +42,17 @@ def filter(df):
     return df.resample("30min").median()
 
 
+def decomp(df):
+    '''
+    Returns domcompositon of the data into
+    1. trend
+    2. sesonal changes 
+    3. residusal
+    '''
+    return seasonal_decompose(df.to_numpy(),
+                                model='additive',
+                                period=freq_per_day)
+
 #####################################################################
 
 # Load data form .csv file
@@ -54,12 +66,19 @@ data.set_index(pd.to_datetime(data['Time'], utc=True, unit="s"),
                inplace=True,
                drop=False)
 
+# Average points with the same date
+data = data.groupby(data.index).mean()
+
 # Calculate the time span of the data in seconds
 time_span = pd.Timedelta(
     data.tail(1).index.values[0] - data.head(1).index.values[0]).seconds
 
-# Average points with the same date
-data = data.groupby(data.index).mean()
+# Calculate frequency of data points
+data_freq = pd.Timedelta(
+    data.tail(1).index.values[0] - data.tail(2).index.values[0]).seconds
+
+# Normalize frequacy to days
+freq_per_day = round(24 * 60 * 60 / data_freq)
 
 # Change from DataFrame to Series
 df = data.squeeze()
@@ -96,6 +115,13 @@ plt.show()
 # shifted data. For some data it is visible that data is correlated
 # after shifting ~24h
 #
-pd.plotting.autocorrelation_plot(df.resample("1h").median(), label="Autocorrelation")
+pd.plotting.autocorrelation_plot(df.resample("1h").median(),
+                                 label="Autocorrelation")
+
+plt.show()
+
+# Playing with decomposition
+#
+decomp(df).plot()
 
 plt.show()
