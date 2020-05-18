@@ -49,14 +49,23 @@ def decomp(df):
     2. sesonal changes 
     3. residusal
     '''
-    return seasonal_decompose(df.to_numpy(),
-                                model='additive',
-                                period=freq_per_day)
+    return seasonal_decompose(df,
+                              model='additive',
+                              period=freq_per_day)
+
+
+def stacked_days(df):
+    '''
+    Devides data into days
+    '''
+    df.index = [df.index.time, df.index.date]
+    return df.unstack()
+
 
 #####################################################################
 
 # Load data form .csv file
-data = pd.read_csv('data.csv', sep=';', parse_dates=['Time'])
+data = pd.read_csv('korona.csv', sep=';', parse_dates=['Time'])
 
 # Leave only MB
 data = data.loc[data['Series'] == 'MB']
@@ -84,7 +93,7 @@ freq_per_day = round(24 * 60 * 60 / data_freq)
 df = data.squeeze()
 
 # One can look at smaller pieces of data -- you short it as following
-# df = df['2020-03-20':'2020-03-23']
+# df = df['2019-08-27':'2019-08-29']
 
 #####################################################################
 
@@ -115,7 +124,7 @@ plt.show()
 # shifted data. For some data it is visible that data is correlated
 # after shifting ~24h
 #
-pd.plotting.autocorrelation_plot(df.resample("1h").median(),
+pd.plotting.autocorrelation_plot(df,
                                  label="Autocorrelation")
 
 plt.show()
@@ -123,5 +132,31 @@ plt.show()
 # Playing with decomposition
 #
 decomp(df).plot()
+
+plt.show()
+
+# Stacked days
+#
+ax = stacked_days(filter(df)).plot(legend=0) 
+
+ax = stacked_days(filter(df)).mean(axis=1).interpolate().plot(
+    linewidth=5, 
+    linestyle=":", 
+    color="red")
+
+ax.figure.autofmt_xdate()
+ax.set_title("Stacked days")
+ax.set_ylabel("Temperature  [$\\degree$ C]")
+ax.set_xlabel(None)
+
+plt.show()
+
+# Average day in the sample
+#
+ax = stacked_days(filter(df)).mean(axis=1).interpolate().plot()
+
+ax.set_title("Average day")
+ax.set_ylabel("Temperature  [$\\degree$ C]")
+ax.set_xlabel(None)
 
 plt.show()
