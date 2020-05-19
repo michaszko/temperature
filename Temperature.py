@@ -57,8 +57,15 @@ def decomp(df):
                                 model='additive',
                                 period=_freq_per_day)
 
+def stacked_days(df):
+    '''
+    Devides data into days
+    '''
+    df.index = [df.index.time, df.index.date]
+    return df.unstack()    
+
 #####################################################################
-def main(input_file, rstime, fmode, variable, decomposition ):
+def main(input_file, rstime, fmode, variable, decomposition, stacked_days ):
     # setting resample time as a global var in order  to avoid moving it around 
     global _resample 
     _resample = rstime
@@ -70,8 +77,7 @@ def main(input_file, rstime, fmode, variable, decomposition ):
 
     # Set time as index of the list. After this operation list has only two columns: Time (which is aslo index) and Value
     data.set_index(pd.to_datetime(data['Time'], utc=True, unit="s"),
-               inplace=True,
-               drop=False)
+        inplace=True, drop=False)
 
     # Average points with the same date
     data = data.groupby(data.index).mean()
@@ -91,8 +97,10 @@ def main(input_file, rstime, fmode, variable, decomposition ):
     # Change from DataFrame to Series
     df = data.squeeze()
 
-    ## One can look at smaller pieces of data -- you short it as following
-    #df = df['2020-03-20':'2020-03-23']
+
+    # One can look at smaller pieces of data -- you short it as following
+    # df = df['2019-08-27':'2019-08-29']
+
 
 #####################################################################
 
@@ -120,14 +128,16 @@ def main(input_file, rstime, fmode, variable, decomposition ):
     label="Sum of der. of filtered", legend=True)
     plt.show()
 
+
     # Playing with autocorrelation -- corellation between data and
     # shifted data. For some data it is visible that data is correlated
     # after shifting ~24h
     #
-    pd.plotting.autocorrelation_plot(df.resample("1h").median(),
+    pd.plotting.autocorrelation_plot(df,
                                  label="Autocorrelation")
 
     plt.show()
+
 
     # Playing with decomposition
     #
@@ -135,6 +145,32 @@ def main(input_file, rstime, fmode, variable, decomposition ):
         decomp(df).plot()
         plt.show()
 
+    # Stacked days
+    #
+    if stacked_days:
+        ax = stacked_days(filter(df)).plot(legend=0) 
+
+        ax = stacked_days(filter(df)).mean(axis=1).interpolate().plot(
+            linewidth=5, 
+            linestyle=":", 
+            color="red")
+
+        ax.figure.autofmt_xdate()
+        ax.set_title("Stacked days")
+        ax.set_ylabel("Temperature  [$\\degree$ C]")
+        ax.set_xlabel(None)
+
+        plt.show()
+
+        # Average day in the sample
+        #
+        ax = stacked_days(filter(df)).mean(axis=1).interpolate().plot()
+
+        ax.set_title("Average day")
+        ax.set_ylabel("Temperature  [$\\degree$ C]")
+        ax.set_xlabel(None)
+
+        plt.show()
 #______________________________________________________________________________________________________________________________
 
 if __name__=="__main__":
@@ -145,13 +181,15 @@ if __name__=="__main__":
 
   parser.add_option('-i',  '--input-file'       , dest="input_file"    , default="data.csv"  , help='Data file')
   parser.add_option(       '--filter'           , dest="fmode"         , default=3           , help='Data filter mode. Choose from 1,2 or 3. Where 1 corresponds to  mode (most repeated value), 2 Median, 3 Similar to rolling() but argument is time not number of data points  ')
-  parser.add_option(       '--resample_time'    , dest="rstime"        , default="30min"     , help='In case of choosing 3 filter you need ro set resample time in the following format: 30min (default)')
+  parser.add_option(       '--resample-time'    , dest="rstime"        , default="30min"     , help='In case of choosing 3 filter you need ro set resample time in the following format: 30min (default)')
   parser.add_option('-v',  '--variable'         , dest="variable"      , default="MB"        , help='Choose the source for the remperature: sensor on teh CPU or MB(default)')
-  parser.add_option('-d',  '--decomposition'    , dest="decomposition" , default=False       , action="store_true", help="Allows to enable decomposition of the signal. Default: False")       
+  parser.add_option('-d',  '--decomposition'    , dest="decomposition" , default=False       , action="store_true", help='Allows to enable decomposition of the signal. Default: False')       
+  parser.add_option('-s',  '--stacked-days'     , dest="stacked_days"  , default=False       , action="store_true", help='Enables option to plot stacked days')
   o,other = parser.parse_args()
   
   main(o.input_file, o.rstime,
-    o.fmode,o.variable,o.decomposition)
+    o.fmode,o.variable, o.decomposition, o.stacked_days)
   
   if other:
     print ("Warning - ignored arguments: ",other)
+
