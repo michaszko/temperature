@@ -139,8 +139,8 @@ def main(input_file, rstime, fmode, variable, decomposition, stacked_days ):
     plt.show()
 
 
-    # Playing with decomposition
-    #
+    # Playing with decomposition 
+    # getting enabled with flag 
     if decomposition:
         decomp(df).plot()
         plt.show()
@@ -171,6 +171,7 @@ def main(input_file, rstime, fmode, variable, decomposition, stacked_days ):
         ax.set_xlabel(None)
 
         plt.show()
+
 #______________________________________________________________________________________________________________________________
 
 if __name__=="__main__":
