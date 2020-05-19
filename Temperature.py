@@ -65,7 +65,7 @@ def stacked_days(df):
     return df.unstack()    
 
 #####################################################################
-def main(input_file, rstime, fmode, variable, decomposition, stacked_days ):
+def main(input_file, rstime, fmode, variable, decomposition, sdays ):
     # setting resample time as a global var in order  to avoid moving it around 
     global _resample 
     _resample = rstime
@@ -147,10 +147,10 @@ def main(input_file, rstime, fmode, variable, decomposition, stacked_days ):
 
     # Stacked days
     #
-    if stacked_days:
-        ax = stacked_days(filter(df)).plot(legend=0) 
+    if sdays:
+        ax = stacked_days(filter(df,fmode)).plot(legend=0) 
 
-        ax = stacked_days(filter(df)).mean(axis=1).interpolate().plot(
+        ax = stacked_days(filter(df,fmode)).mean(axis=1).interpolate().plot(
             linewidth=5, 
             linestyle=":", 
             color="red")
@@ -164,7 +164,7 @@ def main(input_file, rstime, fmode, variable, decomposition, stacked_days ):
 
         # Average day in the sample
         #
-        ax = stacked_days(filter(df)).mean(axis=1).interpolate().plot()
+        ax = stacked_days(filter(df,fmode)).mean(axis=1).interpolate().plot()
 
         ax.set_title("Average day")
         ax.set_ylabel("Temperature  [$\\degree$ C]")
@@ -185,11 +185,11 @@ if __name__=="__main__":
   parser.add_option(       '--resample-time'    , dest="rstime"        , default="30min"     , help='In case of choosing 3 filter you need ro set resample time in the following format: 30min (default)')
   parser.add_option('-v',  '--variable'         , dest="variable"      , default="MB"        , help='Choose the source for the remperature: sensor on teh CPU or MB(default)')
   parser.add_option('-d',  '--decomposition'    , dest="decomposition" , default=False       , action="store_true", help='Allows to enable decomposition of the signal. Default: False')       
-  parser.add_option('-s',  '--stacked-days'     , dest="stacked_days"  , default=False       , action="store_true", help='Enables option to plot stacked days')
+  parser.add_option('-s',  '--stacked-days'     , dest="sdays"         , default=False       , action="store_true", help='Enables option to plot stacked days')
   o,other = parser.parse_args()
   
   main(o.input_file, o.rstime,
-    o.fmode,o.variable, o.decomposition, o.stacked_days)
+    o.fmode,o.variable, o.decomposition, o.sdays)
   
   if other:
     print ("Warning - ignored arguments: ",other)
