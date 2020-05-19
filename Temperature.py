@@ -6,7 +6,8 @@ from scipy import signal
 from scipy.stats import mode
 from statsmodels.tsa.seasonal import seasonal_decompose
 
-
+_resample = None
+_freq_per_day = None 
 def plot_data(df):
     '''
         Plotting data
@@ -22,7 +23,7 @@ def derivative(df):
     return pd.Series(np.gradient(df.to_numpy()), df.index, name='slope')
 
 
-def filter(df):
+def filter(df, fmode):
     '''  
         Resolution of thermometer sometimes casuing date to oscilate.
         To properly analize data one has to get rid of those
@@ -30,16 +31,19 @@ def filter(df):
     '''
     # I quickly implemented moving average: window paramter means how
     # much data has to be taken under consideration
-    #
-    # 1. Mode (most repeated value)
-    # return df.rolling(window=5).apply(lambda x: mode(x)[0])]
-    #
-    # 2. Median
-    # return df.rolling(window=10, center=True).median()
-    #
-    # 3. Similar to rolling() but argument is time not number of data
-    #    points
-    return df.resample("30min").median()
+    if fmode == 1:
+        # 1. Mode (most repeated value)
+        return df.rolling(window=5).apply(lambda x: mode(x)[0])
+    elif fmode == 2:
+        # 2. Median
+        return df.rolling(window=10, center=True).median()
+    elif fmode == 3:
+        # 3. Similar to rolling() but argument is time not number of data
+        #points
+        return df.resample(_resample).median()
+    else: 
+        print ("ERROR: unknown filter mode specified")
+
 
 
 def decomp(df):
@@ -51,77 +55,103 @@ def decomp(df):
     '''
     return seasonal_decompose(df.to_numpy(),
                                 model='additive',
-                                period=freq_per_day)
+                                period=_freq_per_day)
 
 #####################################################################
+def main(input_file, rstime, fmode, variable, decomposition ):
+    # setting resample time as a global var in order  to avoid moving it around 
+    global _resample 
+    _resample = rstime
+    # Load data form .csv file
+    data = pd.read_csv(input_file, sep=';', parse_dates=['Time'])
 
-# Load data form .csv file
-data = pd.read_csv('data.csv', sep=';', parse_dates=['Time'])
+    # Leave only MB
+    data = data.loc[data['Series'] == variable]
 
-# Leave only MB
-data = data.loc[data['Series'] == 'MB']
-
-# Set time as index of the list. After this operation list has only two columns: Time (which is aslo index) and Value
-data.set_index(pd.to_datetime(data['Time'], utc=True, unit="s"),
+    # Set time as index of the list. After this operation list has only two columns: Time (which is aslo index) and Value
+    data.set_index(pd.to_datetime(data['Time'], utc=True, unit="s"),
                inplace=True,
                drop=False)
 
-# Average points with the same date
-data = data.groupby(data.index).mean()
+    # Average points with the same date
+    data = data.groupby(data.index).mean()
 
-# Calculate the time span of the data in seconds
-time_span = pd.Timedelta(
+    # Calculate the time span of the data in seconds
+    time_span = pd.Timedelta(
     data.tail(1).index.values[0] - data.head(1).index.values[0]).seconds
 
-# Calculate frequency of data points
-data_freq = pd.Timedelta(
+    # Calculate frequency of data points
+    data_freq = pd.Timedelta(
     data.tail(1).index.values[0] - data.tail(2).index.values[0]).seconds
 
-# Normalize frequacy to days
-freq_per_day = round(24 * 60 * 60 / data_freq)
+    # Normalize frequacy to days and also set it global 
+    global _freq_per_day
+    _freq_per_day = round(24 * 60 * 60 / data_freq)
 
-# Change from DataFrame to Series
-df = data.squeeze()
+    # Change from DataFrame to Series
+    df = data.squeeze()
 
-# One can look at smaller pieces of data -- you short it as following
-# df = df['2020-03-20':'2020-03-23']
+    ## One can look at smaller pieces of data -- you short it as following
+    #df = df['2020-03-20':'2020-03-23']
 
 #####################################################################
 
-# Comparison of smoothed and raw data
-#
-fig, axes = plt.subplots(2, 1, sharex=True)
+    # Comparison of smoothed and raw data
+    #
+    fig, axes = plt.subplots(2, 1, sharex=True)
 
-axes[0].set_ylabel("Temperature  [$\\degree$ C]")
-axes[1].set_ylabel("Temperature/second \
+    axes[0].set_ylabel("Temperature  [$\\degree$ C]")
+    axes[1].set_ylabel("Temperature/second \
     [${}^{\\degree}\\mathrm{C}/_\\mathrm{sec}$]")
 
-axes[0].set_title("Data")
-axes[1].set_title("Derivative")
+    axes[0].set_title("Data")
+    axes[1].set_title("Derivative")
 
-df.plot(label="Raw", legend=True, ax=axes[0])
-filter(df).plot(label="Filtered", legend=True, ax=axes[0])
-# plt.show()
+    df.plot(label="Raw", legend=True, ax=axes[0])
+    filter(df,fmode).plot(label="Filtered", legend=True, ax=axes[0])
+    # plt.show()
 
-# Playing with derivatives
-#
-derivative(df).plot(label="Raw", legend=True, ax=axes[1])
-derivative(filter(df)).plot(label="Der. of filtered", legend=True)
-derivative(filter(df)).rolling(window=10).sum().plot(
+    # Playing with derivatives
+    #
+  
+    derivative(df).plot(label="Raw", legend=True, ax=axes[1])
+    derivative(filter(df,fmode)).plot(label="Der. of filtered", legend=True)
+    derivative(filter(df,fmode)).rolling(window=10).sum().plot(
     label="Sum of der. of filtered", legend=True)
-plt.show()
+    plt.show()
 
-# Playing with autocorrelation -- corellation between data and
-# shifted data. For some data it is visible that data is correlated
-# after shifting ~24h
-#
-pd.plotting.autocorrelation_plot(df.resample("1h").median(),
+    # Playing with autocorrelation -- corellation between data and
+    # shifted data. For some data it is visible that data is correlated
+    # after shifting ~24h
+    #
+    pd.plotting.autocorrelation_plot(df.resample("1h").median(),
                                  label="Autocorrelation")
 
-plt.show()
+    plt.show()
 
-# Playing with decomposition
-#
-decomp(df).plot()
+    # Playing with decomposition
+    #
+    if decomposition:
+        decomp(df).plot()
+        plt.show()
 
-plt.show()
+#______________________________________________________________________________________________________________________________
+
+if __name__=="__main__":
+  
+  import optparse
+  parser = optparse.OptionParser(usage="%prog [options]..",description="Create plots of the temperature fluctuations ")
+
+
+  parser.add_option('-i',  '--input-file'       , dest="input_file"    , default="data.csv"  , help='Data file')
+  parser.add_option(       '--filter'           , dest="fmode"         , default=3           , help='Data filter mode. Choose from 1,2 or 3. Where 1 corresponds to  mode (most repeated value), 2 Median, 3 Similar to rolling() but argument is time not number of data points  ')
+  parser.add_option(       '--resample_time'    , dest="rstime"        , default="30min"     , help='In case of choosing 3 filter you need ro set resample time in the following format: 30min (default)')
+  parser.add_option('-v',  '--variable'         , dest="variable"      , default="MB"        , help='Choose the source for the remperature: sensor on teh CPU or MB(default)')
+  parser.add_option('-d',  '--decomposition'    , dest="decomposition" , default=False       , action="store_true", help="Allows to enable decomposition of the signal. Default: False")       
+  o,other = parser.parse_args()
+  
+  main(o.input_file, o.rstime,
+    o.fmode,o.variable,o.decomposition)
+  
+  if other:
+    print ("Warning - ignored arguments: ",other)
