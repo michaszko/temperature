@@ -7,6 +7,39 @@ from scipy.stats import mode
 from statsmodels.tsa.seasonal import seasonal_decompose
 
 
+def load_data(name='mb.csv', type='P'):
+    # Load data form .csv file
+    if type == 'P':  # Pioterk data
+        data = pd.read_csv(name,
+                           sep=',',
+                           parse_dates=['time'],
+                           index_col='time')
+
+        data = data.drop(columns=['name', 'state', 'host'])
+
+        # Set time as index of the list. After this operation list has only two columns: Time (which is aslo index) and Value
+        data.set_index(pd.to_datetime(data.index, unit='ns'),
+                       inplace=True,
+                       drop=False)
+
+    ###############################################
+
+    if type == 'D':  # Diablo data
+        data = pd.read_csv(name,
+                           sep=';',
+                           parse_dates=['Time'],
+                           index_col='Time')
+
+        # Leave only MB
+        data = data.loc[data['Series'] == 'MB']
+
+        # Set time as index of the list. After this operation list has only two columns: Time (which is aslo index) and Value
+        data.set_index(pd.to_datetime(data['Time'], utc=True, unit="s"),
+                       inplace=True,
+                       drop=False)
+
+    return data
+
 def plot_data(df):
     '''
         Plotting data
@@ -22,7 +55,7 @@ def derivative(df):
     return pd.Series(np.gradient(df.to_numpy()), df.index, name='slope')
 
 
-def filter(df):
+def filter(df, time='30min'):
     '''  
         Resolution of thermometer sometimes casuing date to oscilate.
         To properly analize data one has to get rid of those
@@ -39,7 +72,7 @@ def filter(df):
     #
     # 3. Similar to rolling() but argument is time not number of data
     #    points
-    return df.resample("30min").median()
+    return df.resample(time).median()
 
 
 def decomp(df):
@@ -49,31 +82,31 @@ def decomp(df):
     2. sesonal changes 
     3. residusal
     '''
-    return seasonal_decompose(df,
-                              model='additive',
-                              period=freq_per_day)
+    return seasonal_decompose(df, model='additive', period=freq_per_day)
 
 
-def stacked_days(df):
+def split(df, time='D'):
     '''
-    Devides data into days
+    Devides data into days or weeks or months
     '''
-    df.index = [df.index.time, df.index.date]
+    if time == 'M':
+        # Divide into months
+        df.index = [df.index.day, df.index.time, df.index.month]
+
+    if time == 'W':
+        # Divide into weeks
+        df.index = [df.index.dayofweek, df.index.time, df.index.week]
+
+    if time == 'D':
+        # Divide into days
+        df.index = [df.index.time, df.index.date]
+
     return df.unstack()
 
 
 #####################################################################
-
-# Load data form .csv file
-data = pd.read_csv('korona.csv', sep=';', parse_dates=['Time'])
-
-# Leave only MB
-data = data.loc[data['Series'] == 'MB']
-
-# Set time as index of the list. After this operation list has only two columns: Time (which is aslo index) and Value
-data.set_index(pd.to_datetime(data['Time'], utc=True, unit="s"),
-               inplace=True,
-               drop=False)
+# Load data
+data =load_data()
 
 # Average points with the same date
 data = data.groupby(data.index).mean()
@@ -93,7 +126,7 @@ freq_per_day = round(24 * 60 * 60 / data_freq)
 df = data.squeeze()
 
 # One can look at smaller pieces of data -- you short it as following
-# df = df['2019-08-27':'2019-08-29']
+df = df['2019-05-01':'2019-05-30']
 
 #####################################################################
 
@@ -123,11 +156,11 @@ plt.show()
 # Playing with autocorrelation -- corellation between data and
 # shifted data. For some data it is visible that data is correlated
 # after shifting ~24h
-#
-pd.plotting.autocorrelation_plot(df,
-                                 label="Autocorrelation")
 
-plt.show()
+# pd.plotting.autocorrelation_plot(df,
+#                                  label="Autocorrelation")
+
+# plt.show()
 
 # Playing with decomposition
 #
@@ -137,12 +170,11 @@ plt.show()
 
 # Stacked days
 #
-ax = stacked_days(filter(df)).plot(legend=0) 
+ax = split(filter(data)).plot(legend=0)
 
-ax = stacked_days(filter(df)).mean(axis=1).interpolate().plot(
-    linewidth=5, 
-    linestyle=":", 
-    color="red")
+ax = split(filter(data)).mean(axis=1).plot(linewidth=5,
+                                           linestyle=":",
+                                           color="red")
 
 ax.figure.autofmt_xdate()
 ax.set_title("Stacked days")
@@ -153,7 +185,7 @@ plt.show()
 
 # Average day in the sample
 #
-ax = stacked_days(filter(df)).mean(axis=1).interpolate().plot()
+ax = split(filter(data)).mean(axis=1).plot()
 
 ax.set_title("Average day")
 ax.set_ylabel("Temperature  [$\\degree$ C]")
