@@ -9,10 +9,10 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 _resample = None
 _freq_per_day = None 
 
-def load_data(name='mb.csv', type='P'):
+def load_data(input_file, type='P'):
     # Load data form .csv file
     if type == 'P':  # Pioterk data
-        data = pd.read_csv(name,
+        data = pd.read_csv(input_file,
                            sep=',',
                            parse_dates=['time'],
                            index_col='time')
@@ -27,7 +27,7 @@ def load_data(name='mb.csv', type='P'):
     ###############################################
 
     if type == 'D':  # Diablo data
-        data = pd.read_csv(name,
+        data = pd.read_csv(input_file,
                            sep=';',
                            parse_dates=['Time'],
                            index_col='Time')
@@ -58,7 +58,7 @@ def derivative(df):
     return pd.Series(np.gradient(df.to_numpy()), df.index, name='slope')
 
 
-def filter(df, fmode=3, time='30min'):
+def filter(df, fmode):
     '''  
         Resolution of thermometer sometimes casuing date to oscilate.
         To properly analize data one has to get rid of those
@@ -66,15 +66,14 @@ def filter(df, fmode=3, time='30min'):
     '''
     # I quickly implemented moving average: window paramter means how
     # much data has to be taken under consideration
-    if fmode == 1:
+    if fmode == '1':
         # 1. Mode (most repeated value)
         return df.rolling(window=5).apply(lambda x: mode(x)[0])
-    elif fmode == 2:
+    elif fmode == '2':
         # 2. Median
         return df.rolling(window=10, center=True).median()
-    elif fmode == 3:
-        # 3. Similar to rolling() but argument is time not number of data
-        #points
+    elif fmode == '3':
+        # 3. Similar to rolling() but argument is time not number of data points
         return df.resample(_resample).median()
     else: 
         print ("ERROR: unknown filter mode specified")
@@ -117,7 +116,7 @@ def main(input_file, rstime, fmode, variable, decomposition, sdays ):
     _resample = rstime
 
 	# Load data
-	data =load_data()
+    data = load_data(input_file)
 
     # Average points with the same date
     data = data.groupby(data.index).mean()
@@ -137,8 +136,8 @@ def main(input_file, rstime, fmode, variable, decomposition, sdays ):
     # Change from DataFrame to Series
     df = data.squeeze()
 
-
-	# One can look at smaller pieces of data -- you short it as following
+	# One can look at smaller pieces of data -- you short it as 
+    # following
 	# df = df['2019-05-01':'2019-05-30']
 
 #####################################################################
@@ -172,10 +171,10 @@ def main(input_file, rstime, fmode, variable, decomposition, sdays ):
     # shifted data. For some data it is visible that data is correlated
     # after shifting ~24h
     #
-    pd.plotting.autocorrelation_plot(df,
-                                 label="Autocorrelation")
+    # pd.plotting.autocorrelation_plot(df,
+    #                              label="Autocorrelation")
 
-	plt.show()
+    # plt.show()
 
 
     # Playing with decomposition 
@@ -219,7 +218,7 @@ if __name__=="__main__":
   parser = optparse.OptionParser(usage="%prog [options]..",description="Create plots of the temperature fluctuations ")
 
 
-  parser.add_option('-i',  '--input-file'       , dest="input_file"    , default="data.csv"  , help='Data file')
+  parser.add_option('-i',  '--input-file'       , dest="input_file"    , default="mb.csv"  , help='Data file')
   parser.add_option(       '--filter'           , dest="fmode"         , default=3           , help='Data filter mode. Choose from 1,2 or 3. Where 1 corresponds to  mode (most repeated value), 2 Median, 3 Similar to rolling() but argument is time not number of data points  ')
   parser.add_option(       '--resample-time'    , dest="rstime"        , default="30min"     , help='In case of choosing 3 filter you need ro set resample time in the following format: 30min (default)')
   parser.add_option('-v',  '--variable'         , dest="variable"      , default="MB"        , help='Choose the source for the remperature: sensor on teh CPU or MB(default)')
