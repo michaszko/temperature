@@ -111,7 +111,7 @@ def split(df):
 
     if _data_split == 'W':
         # Divide into weeks
-        df.index = [df.index.dayofweek, df.index.time, df.index.week]
+        df.index = [df.index.weekday, df.index.time, df.index.week]
 
     if _data_split == 'D':
         # Divide into days
@@ -204,25 +204,51 @@ def main(input_file, data_type, data_split, rstime, fmode, variable,
     # Stacked days
     #
     if sdays:
-        ax = split(filter(df, fmode)).plot(legend=0)
+        
+        # Somehow I cant put the same range for fill_between for days
+        # and the rest. It is caused by multiindex - it cannot pass
+        # through plotter
+        if data_split=='D':
+            mrange = split(filter(df, fmode)).index.values
+        else:
+            mrange = range(len(split(filter(df, fmode)).index))
 
-        ax = split(filter(df, fmode)).mean(axis=1).interpolate().plot(
-            linewidth=5,
-            linestyle=":",
-            color="red")
+        # standard deviation of time series
+        mstd = split(filter(df, fmode)).std(axis=1) 
+        # average of time series
+        mavg = split(filter(df, fmode)).mean(axis=1)
+
+        #############################################################
+
+        # Plot every line 
+        ax = split(filter(df, fmode)).plot(legend=0, alpha=0.2)
+
+        # Plot averge
+        ax = mavg.interpolate().plot(
+            linewidth=2,
+            linestyle="-",
+            color="blue")        
+
+        # Plot std
+        ax.fill_between(mrange, mavg - mstd, mavg + mstd, color='b', alpha=0.2)
 
         ax.figure.autofmt_xdate()
-        ax.set_title("Stacked days")
+        ax.set_title("Stacked " + data_split)
         ax.set_ylabel("Temperature  [$\\degree$ C]")
         ax.set_xlabel(None)
 
         plt.show()
 
+        #############################################################
+
         # Average day in the sample
         #
         ax = split(filter(df, fmode)).mean(axis=1).plot()
 
-        ax.set_title("Average day")
+        # Plot std
+        plt.fill_between(mrange, mavg - mstd, mavg + mstd, color='b', alpha=0.2)
+
+        ax.set_title("Average " + data_split)
         ax.set_ylabel("Temperature  [$\\degree$ C]")
         ax.set_xlabel(None)
 
