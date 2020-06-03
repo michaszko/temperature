@@ -44,7 +44,7 @@ def load_data(input_file):
 
         # Set time as index of the list. After this operation list
         # has only two columns: Time (which is aslo index) and Value
-        data.set_index(pd.to_datetime(data['Time'], utc=True,
+        data.set_index(pd.to_datetime(data.index, utc=True,
                                       unit="s"), inplace=True, drop=False)
     else:
         print("ERROR: unknown data type specified")
@@ -158,7 +158,10 @@ def main(input_file, data_type, data_split, rstime, fmode, variable,
 
     # One can look at smaller pieces of data -- you short it as
     # following
-    # df = df['2019-05-01':'2019-05-30']
+    # Winter
+    # df = df['2018-11-01':'2019-04-01']
+    # Summer
+    # df = df['2019-05-01':'2019-09-01']
 
 #####################################################################
 
@@ -253,6 +256,33 @@ def main(input_file, data_type, data_split, rstime, fmode, variable,
         ax.set_xlabel(None)
 
         plt.show()
+
+        #############################################################
+
+        # Average day temp and its std -- scatter plot
+
+        dff = pd.DataFrame()
+        dff["avg"] = split(filter(df, fmode)).mean(axis=0)
+        dff["std"] = split(filter(df, fmode)).std(axis=0)
+
+        if data_split=='D':
+            ax = dff.plot.scatter("avg", "std", c=dff.index.month,  colormap='twilight_shifted')
+        else:
+            ax = dff.plot.scatter("avg", "std", c=dff.index,  colormap='twilight_shifted')
+
+        ax.set_title("Average temp. of " + data_split + " with its std")
+        ax.set_xlabel("Temperature  [$\\degree$ C]")
+        ax.set_ylabel("Standard deviations")
+
+        plt.show()
+
+        #############################################################
+
+        # Histograms
+
+        # ax = dff.hist(column="avg",bins=20)
+
+        # plt.show()
 
 # ______________________________________________________________________________________________________________________________
 
