@@ -264,11 +264,14 @@ def main(input_file, data_type, data_split, rstime, fmode, variable,
         dff = pd.DataFrame()
         dff["avg"] = split(filter(df, fmode)).mean(axis=0)
         dff["std"] = split(filter(df, fmode)).std(axis=0)
+        dff["max"] = split(filter(df, fmode)).max(axis=0)
+        dff["min"] = split(filter(df, fmode)).min(axis=0)
+        dff["spread"] = dff["max"] - dff["min"]
 
         if data_split=='D':
-            ax = dff.plot.scatter("avg", "std", c=dff.index.month,  colormap='twilight_shifted')
+            ax = dff.plot.scatter("avg", "std", c=dff.index.month,  colormap='viridis')
         else:
-            ax = dff.plot.scatter("avg", "std", c=dff.index,  colormap='twilight_shifted')
+            ax = dff.plot.scatter("avg", "std", c=dff.index,  colormap='viridis')
 
         ax.set_title("Average temp. of " + data_split + " with its std")
         ax.set_xlabel("Temperature  [$\\degree$ C]")
