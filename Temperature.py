@@ -5,10 +5,14 @@ import scipy as sp
 from scipy import signal
 from scipy.stats import mode
 from statsmodels.tsa.seasonal import seasonal_decompose
+from matplotlib.colors import LogNorm
+from matplotlib.animation import FuncAnimation, ArtistAnimation
 
 _resample = None
 _freq_per_day = None
 _data_type = None
+
+pd.set_option('display.max_colwidth', None)
 
 
 def load_data(input_file):
@@ -44,8 +48,9 @@ def load_data(input_file):
 
         # Set time as index of the list. After this operation list
         # has only two columns: Time (which is aslo index) and Value
-        data.set_index(pd.to_datetime(data.index, utc=True,
-                                      unit="s"), inplace=True, drop=False)
+        data.set_index(pd.to_datetime(data.index, utc=True, unit="s"),
+                       inplace=True,
+                       drop=False)
     else:
         print("ERROR: unknown data type specified")
     if data.empty:
@@ -119,11 +124,74 @@ def split(df):
 
     return df.unstack()
 
+def normalize(df):
+    '''
+    Return dataframe devided into days from which everyone start at value 0
+    '''
+
+    df.index = [df.index.date, df.index.time]
+
+    df = df.rename_axis(index=['Date', 'Time'])
+
+    midnight = pd.Timestamp(2017, 1, 1, 0).time()
+
+    ind = df.index.get_level_values('Date').unique()
+
+    dfs = pd.DataFrame()
+
+    for i in ind:
+        dfs[i] = df[i] - df.loc[(i, midnight)]
+
+    return dfs
+
+def plot_stacked_days(df, data_split = 'D'):
+
+    if data_split == 'D':
+        mrange = df.index.values
+    else:
+        mrange = range(len(df.index))
+
+    # standard deviation of time series
+    mstd = df.std(axis=1)
+    # average of time series
+    mavg = df.mean(axis=1)
+
+    ax = df.plot(legend=0, alpha=0.3)
+
+    # Plot averge
+    ax = mavg.interpolate().plot(linewidth=2, linestyle="-", color="blue")
+
+    # Plot std
+    ax.fill_between(mrange, mavg - mstd, mavg + mstd, color='b', alpha=0.2)
+
+    ax.figure.autofmt_xdate()
+    ax.set_title("Stacked " + data_split)
+    ax.set_ylabel("Temperature  [$\\degree$ C]")
+    ax.set_xlabel(None)
+
+    plt.show()
+
+    # Average day in the sample
+    ax = df.mean(axis=1).plot()
+
+    # Plot std
+    plt.fill_between(mrange,
+                     mavg - mstd,
+                     mavg + mstd,
+                     color='b',
+                     alpha=0.2)
+
+    ax.set_title("Average " + data_split)
+    ax.set_ylabel("Temperature  [$\\degree$ C]")
+    ax.set_xlabel(None)
+
+    plt.show()
+
 #########################################################
 
 
 def main(input_file, data_type, data_split, rstime, fmode, variable,
-         decomposition, sdays):
+         decomposition, sdays, phase):
     # TOOD by MA: move all global variables setting to a separate
     # function
     global _resample
@@ -162,8 +230,9 @@ def main(input_file, data_type, data_split, rstime, fmode, variable,
     # df = df['2018-11-01':'2019-04-01']
     # Summer
     # df = df['2019-05-01':'2019-09-01']
+    # df = df['2019-05-01':'2019-05-31']
 
-#####################################################################
+    #################################################################
 
     # Comparison of smoothed and raw data
     #
@@ -192,7 +261,7 @@ def main(input_file, data_type, data_split, rstime, fmode, variable,
     # Playing with autocorrelation -- corellation between data and
     # shifted data. For some data it is visible that data is
     # correlated after shifting ~24h
-    
+
     # pd.plotting.autocorrelation_plot(df,
     #                              label="Autocorrelation")
 
@@ -207,88 +276,159 @@ def main(input_file, data_type, data_split, rstime, fmode, variable,
     # Stacked days
     #
     if sdays:
-        
-        # Somehow I cant put the same range for fill_between for days
-        # and the rest. It is caused by multiindex - it cannot pass
-        # through plotter
-        if data_split=='D':
-            mrange = split(filter(df, fmode)).index.values
-        else:
-            mrange = range(len(split(filter(df, fmode)).index))
 
-        # standard deviation of time series
-        mstd = split(filter(df, fmode)).std(axis=1) 
-        # average of time series
-        mavg = split(filter(df, fmode)).mean(axis=1)
+        only_open = False
+        _normalize = True
 
-        #############################################################
+        if only_open and data_split == 'D':
 
-        # Plot every line 
-        ax = split(filter(df, fmode)).plot(legend=0, alpha=0.2)
+            dfs = filter(df, fmode)
 
-        # Plot averge
-        ax = mavg.interpolate().plot(
-            linewidth=2,
-            linestyle="-",
-            color="blue")        
+            x = derivative(df).rolling(window=10).sum()
+            y = x[x < -3] 
+            # I assume that doors are open when derivative drops at
+            # least 3-4 deegree
+            open_doors_days = y.groupby(y.index.date).sum().index
 
-        # Plot std
-        ax.fill_between(mrange, mavg - mstd, mavg + mstd, color='b', alpha=0.2)
+            dfs.index = [dfs.index.date, dfs.index.time]
 
-        ax.figure.autofmt_xdate()
-        ax.set_title("Stacked " + data_split)
-        ax.set_ylabel("Temperature  [$\\degree$ C]")
-        ax.set_xlabel(None)
+            dfs = dfs.rename_axis(index=['Date', 'Time'])
 
-        plt.show()
+            # Days when doors were open
+            # dfs = dfs[dfs.index.isin(open_doors_days, level='Date')]
+            # Days when doors were closed
+            dsf = dfs[~dfs.index.isin(open_doors_days, level='Date')]
 
-        #############################################################
+            dfs = dfs.unstack(level=0)
 
-        # Average day in the sample
-        #
-        ax = split(filter(df, fmode)).mean(axis=1).plot()
+            #########################################################
 
-        # Plot std
-        plt.fill_between(mrange, mavg - mstd, mavg + mstd, color='b', alpha=0.2)
+            plot_stacked_days(df)
 
-        ax.set_title("Average " + data_split)
-        ax.set_ylabel("Temperature  [$\\degree$ C]")
-        ax.set_xlabel(None)
+        if _normalize and data_split == 'D':
 
-        plt.show()
+            dfs = normalize(filter(df, fmode))
+
+            plot_stacked_days(dfs)
+
+
+        plot_stacked_days(split(filter(df, fmode)), data_split)
 
         #############################################################
 
-        # Average day temp and its std -- scatter plot
+    if phase:
 
         dff = pd.DataFrame()
-        dff["avg"] = split(filter(df, fmode)).mean(axis=0)
-        dff["std"] = split(filter(df, fmode)).std(axis=0)
-        dff["max"] = split(filter(df, fmode)).max(axis=0)
-        dff["min"] = split(filter(df, fmode)).min(axis=0)
-        dff["spread"] = dff["max"] - dff["min"]
 
-        if data_split=='D':
-            ax = dff.plot.scatter("avg", "std", c=dff.index.month,  colormap='viridis')
-        else:
-            ax = dff.plot.scatter("avg", "std", c=dff.index,  colormap='viridis')
+        # Phase diagram of avarage quantities
+        if int(phase) == 0:
+            dff["avg"] = split(filter(df, fmode)).mean(axis=0)
+            dff["std"] = split(filter(df, fmode)).std(axis=0)
+            dff["max"] = split(filter(df, fmode)).max(axis=0)
+            dff["min"] = split(filter(df, fmode)).min(axis=0)
+            dff["spread"] = dff["max"] - dff["min"]
 
-        ax.set_title("Average temp. of " + data_split + " with its std")
-        ax.set_xlabel("Temperature  [$\\degree$ C]")
-        ax.set_ylabel("Standard deviations")
+            xplot = "avg"
+            yplot = "std"
 
-        plt.show()
+            if data_split == 'D':
+                ax = dff.plot.scatter(xplot,
+                                      yplot,
+                                      c=dff.index.month,
+                                      colormap='viridis')
+            else:
+                ax = dff.plot.scatter(xplot,
+                                      yplot,
+                                      c=dff.index,
+                                      colormap='viridis')
+
+        # Phase diagram of all data points
+        elif int(phase) == 1:
+            _window = 10
+
+            dff["norm"] = filter(df, fmode)
+            dff["der"] = derivative(filter(
+                df, fmode)).rolling(window=_window).sum()
+            dff["der2"] = derivative(
+                derivative(filter(df, fmode)).rolling(
+                    window=_window).sum()).rolling(window=_window).sum()
+
+            xplot = "norm"
+            yplot = "der"
+
+            ax = dff.plot.scatter(xplot,
+                                  yplot,
+                                  c=dff.index.month,
+                                  colormap='viridis')
+
+        # ax.plot(np.linspace(-15,15,100),0.75*np.linspace(-15,15,100))
+
+        # ax.set_title("Average temp. of " + data_split + " with its std")
+        ax.set_xlabel(xplot)
+        ax.set_ylabel(yplot)
+
+        # plt.show()
 
         #############################################################
 
         # Histograms
 
-        # ax = dff.hist(column="avg",bins=20)
+        fig, ax = plt.subplots(1, 1)
+
+        x = dff[xplot].to_numpy()
+        y = dff[yplot].to_numpy()
+
+        # Remove nan and zeros
+        y = y[~np.isnan(x)]
+        x = x[~np.isnan(x)]
+        x = x[~np.isnan(y)]
+        y = y[~np.isnan(y)]
+
+        # norm = norm[der != 0]
+        # der2 = der2[der != 0]
+        # der = der[der != 0]
+
+        plt.hist2d(
+            x,
+            y,
+            bins=20,
+            #range=[[np.min(nor[np.nonzero(nor)]),np.max(nor[np.nonzero(nor)])],[der.min(),der.max()]],
+            cmap=plt.cm.jet,
+            norm=LogNorm())
+
+        ax.set_xlabel(xplot)
+        ax.set_ylabel(yplot)
+
+        plt.colorbar(ax=ax)
+        plt.show()
+
+        #############################################################
+
+        # win = 5
+        # fig, ax = plt.subplots(win,win)
+        # fig.set_tight_layout(True)
+
+        # for i in range(win):
+        #     for j in range(1, win+1):
+        #         dff = pd.DataFrame()
+
+        #         dff["norm"] = filter(df, fmode)
+        #         dff["der"] = derivative(filter(df, fmode)).rolling(window=win*i+j).sum()
+        #         dff["der2"] = derivative(derivative(filter(df, fmode)).rolling(window=win*i+j).sum()).rolling(window=win*i+j).sum()
+
+        #         xplot = "norm"
+        #         yplot = "der"
+
+        #         ax[i,j-1].scatter(dff[xplot], dff[yplot], c=dff.index.month, cmap='viridis')
+
+        #         # ax[i,j].set_xlabel(xplot)
+        #         # ax[i,j].set_ylabel(yplot)
+        #         ax[i,j-1].set_title(str(win*i+j))
 
         # plt.show()
 
-# ______________________________________________________________________________________________________________________________
 
+# ______________________________________________________________________________________________________________________________
 
 if __name__ == "__main__":
 
@@ -303,39 +443,53 @@ if __name__ == "__main__":
                       default="mb.csv",
                       help='Data file')
 
-    parser.add_option('-t',
-                      '--data-type',
-                      dest="data_type",
-                      default="P",
-                      help='Data  type. Put "P" for Pioterk data and "D" for Diablo')
+    parser.add_option(
+        '-t',
+        '--data-type',
+        dest="data_type",
+        default="P",
+        help='Data  type. Put "P" for Pioterk data and "D" for Diablo')
 
-    parser.add_option('--data-split',
-                      dest="data_split",
-                      default="D",
-                      help='Data  spliting range. Put "D" for days,"W" for weeks and  "M" for months')
+    parser.add_option(
+        '--data-split',
+        dest="data_split",
+        default="D",
+        help=
+        'Data  spliting range. Put "D" for days,"W" for weeks and  "M" for months'
+    )
 
-    parser.add_option('--filter',
-                      dest="fmode",
-                      default=3,
-                      help='Data filter mode. Choose from 1,2 or 3. Where 1 corresponds to  mode (most repeated value), 2 Median, 3 Similar to rolling() but argument is time not number of data points  ')
+    parser.add_option(
+        '--filter',
+        dest="fmode",
+        default=3,
+        help=
+        'Data filter mode. Choose from 1,2 or 3. Where 1 corresponds to  mode (most repeated value), 2 Median, 3 Similar to rolling() but argument is time not number of data points  '
+    )
 
-    parser.add_option('--resample-time',
-                      dest="rstime",
-                      default="30min",
-                      help='In case of choosing 3 filter you need ro set resample time in the following format: 30min (default)')
+    parser.add_option(
+        '--resample-time',
+        dest="rstime",
+        default="10min",
+        help=
+        'In case of choosing 3 filter you need ro set resample time in the following format: 30min (default)'
+    )
 
-    parser.add_option('-v',
-                      '--variable',
-                      dest="variable",
-                      default="MB",
-                      help='Choose the source for the remperature: sensor on teh CPU or MB(default)')
+    parser.add_option(
+        '-v',
+        '--variable',
+        dest="variable",
+        default="MB",
+        help=
+        'Choose the source for the remperature: sensor on teh CPU or MB(default)'
+    )
 
-    parser.add_option('-d',
-                      '--decomposition',
-                      dest="decomposition",
-                      default=False,
-                      action="store_true",
-                      help='Allows to enable decomposition of the signal. Default: False')
+    parser.add_option(
+        '-d',
+        '--decomposition',
+        dest="decomposition",
+        default=False,
+        action="store_true",
+        help='Allows to enable decomposition of the signal. Default: False')
 
     parser.add_option('-s',
                       '--stacked-days',
@@ -344,10 +498,16 @@ if __name__ == "__main__":
                       action="store_true",
                       help='Enables option to plot stacked days')
 
+    parser.add_option('-p',
+                      '--phase-diagram',
+                      dest="phase",
+                      default=False,
+                      help='Enables option to plot phase diagrams')
+
     o, other = parser.parse_args()
 
     main(o.input_file, o.data_type, o.data_split, o.rstime, o.fmode,
-         o.variable, o.decomposition, o.sdays)
+         o.variable, o.decomposition, o.sdays, o.phase)
 
     if other:
         print("Warning - ignored arguments: ", other)
